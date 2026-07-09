@@ -1,41 +1,19 @@
 import io
 import zipfile
-from typing import List, Optional, Any
-from pydantic import BaseModel
+from typing import List, Tuple
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-class ClientMergeRange(BaseModel):
-    startRow: int
-    startCol: int
-    endRow: int
-    endCol: int
-
-class ClientTableItem(BaseModel):
-    tableName: Optional[str] = None
-    headers: List[Any] = []
-    rows: List[List[str]] = []
-    merges: Optional[List[ClientMergeRange]] = None
-    headerRows: Optional[List[int]] = None
-
-class ExportOptions(BaseModel):
-    zip: Optional[bool] = False
-    verticalMerge: Optional[bool] = False
-
-class ExportRequestSchema(BaseModel):
-    tables: List[ClientTableItem]
-    options: Optional[ExportOptions] = None
+from models.excel import ClientMergeRange, ClientTableItem, ExportOptions
+from utils.excel_utils import sanitize_sheet_name, sanitize_file_name
 
 def build_workbook_for_table_python(table: ClientTableItem, idx: int) -> Workbook:
     wb = Workbook()
     if wb.active:
         wb.remove(wb.active)
         
-    raw_name = table.tableName or f"Bảng {idx + 1}"
-    for char in ['\\', '/', '?', '*', '[', ']', ':']:
-        raw_name = raw_name.replace(char, '')
-    sheet_name = raw_name[:31].strip() or f"Sheet {idx + 1}"
+    sheet_name = sanitize_sheet_name(table.tableName, f"Sheet {idx + 1}")
     
     ws = wb.create_sheet(title=sheet_name)
     ws.views.sheetView[0].showGridLines = True
@@ -256,10 +234,7 @@ def build_individual_zip_buffer(tables: List[ClientTableItem]) -> bytes:
             excel_buffer = io.BytesIO()
             wb.save(excel_buffer)
             
-            raw_file_name = table.tableName or f"Bảng {idx + 1}"
-            for char in ['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>']:
-                raw_file_name = raw_file_name.replace(char, '_')
-            raw_file_name = raw_file_name.strip() or f"Bang_{idx + 1}"
+            raw_file_name = sanitize_file_name(table.tableName, f"Bang_{idx + 1}")
             
             final_file_name = raw_file_name
             counter = 1
@@ -280,11 +255,7 @@ def build_multi_sheet_workbook(tables: List[ClientTableItem]) -> Workbook:
     used_sheet_names = set()
     
     for idx, table in enumerate(tables):
-        raw_name = table.tableName or f"Bảng {idx + 1}"
-        for char in ['\\', '/', '?', '*', '[', ']', ':']:
-            raw_name = raw_name.replace(char, '')
-            
-        sheet_name = raw_name[:31].strip() or f"Sheet {idx + 1}"
+        sheet_name = sanitize_sheet_name(table.tableName, f"Sheet {idx + 1}")
         
         final_sheet_name = sheet_name
         counter = 1
@@ -387,3 +358,21 @@ def build_multi_sheet_workbook(tables: List[ClientTableItem]) -> Workbook:
             ws.column_dimensions[col_letter].width = max(10, min(50, max_len + 3))
             
     return wb
+
+def export_tables(tables: List[ClientTableItem], options: ExportOptions) -> Tuple[bytes, str, str]:
+    """Quyết định định dạng xuất file (ZIP, dọc gộp, hoặc nhiều Sheet) và trả về bytes dữ liệu cùng media_type và filename tương ứng."""
+    if options.zip:
+        zip_bytes = build_individual_zip_buffer(tables)
+        return zip_bytes, "application/zip", "extracted_tables_individual.zip"
+        
+    elif options.verticalMerge:
+        wb = build_combined_vertical_workbook(tables)
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        return excel_buffer.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "extracted_data_merged.xlsx"
+        
+    else:
+        wb = build_multi_sheet_workbook(tables)
+        excel_buffer = io.BytesIO()
+        wb.save(excel_buffer)
+        return excel_buffer.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "extracted_data_combined.xlsx"

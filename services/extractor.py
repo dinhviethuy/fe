@@ -9,21 +9,12 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 
 from core.config import settings
-from services.document_splitter import process_file_to_image_pages
+from utils.document_splitter import process_file_to_image_pages
 from services.document_ai import process_single_image_to_table
+from utils.file_converter import safe_convert
 
 # Khởi tạo ThreadPool để giới hạn số luồng (tránh 429 Too Many Requests từ Google)
 executor = ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT_WORKERS)
-
-def safe_convert(docx_path: str, pdf_path: str):
-    """Bọc chuyển đổi Word sang PDF kèm khởi tạo COM trên luồng phụ."""
-    import pythoncom
-    from docx2pdf import convert
-    pythoncom.CoInitialize()
-    try:
-        convert(docx_path, pdf_path)
-    finally:
-        pythoncom.CoUninitialize()
 
 async def process_file_to_tables(file: UploadFile) -> dict:
     """Xử lý bóc tách file thành cấu trúc JSON các bảng (PDF, DOCX, Images)."""

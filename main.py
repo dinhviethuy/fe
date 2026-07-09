@@ -49,7 +49,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import traceback
 
 from core.config import settings
-from controllers import extraction_controller
+from routes import extraction_routes
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -81,8 +81,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         content={"detail": exc.detail}
     )
 
-# Đăng ký router từ Controller
-app.include_router(extraction_controller.router)
+# Đăng ký router từ Routes
+app.include_router(extraction_routes.router)
 
 if __name__ == "__main__":
     import uvicorn
