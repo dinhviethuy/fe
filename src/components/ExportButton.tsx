@@ -20,7 +20,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({ tables, disabled }) => {
   const exportSingleTable = async (table: TableItem, filename: string) => {
     setExportingAll(true);
     try {
-      const response = await fetch(`${API_BASE}/api/export-excel`, {
+      const response = await fetch(`${API_BASE}/export-excel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tables: [table] }),
@@ -53,7 +53,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({ tables, disabled }) => {
 
     setExportingAll(true);
     try {
-      const response = await fetch(`${API_BASE}/api/export-excel`, {
+      const response = await fetch(`${API_BASE}/export-excel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tables }),
@@ -86,7 +86,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({ tables, disabled }) => {
 
     setExportingIndividual(true);
     try {
-      const response = await fetch(`${API_BASE}/api/export-excel`, {
+      const response = await fetch(`${API_BASE}/export-excel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

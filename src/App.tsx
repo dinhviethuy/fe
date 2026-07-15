@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import UploadZone from './components/UploadZone';
-import TableEditor from './components/TableEditor';
-import ExcelPreview from './components/ExcelPreview';
-import ExportButton from './components/ExportButton';
-import type { TableItem, FileInfo, ExtractResponse } from './types';
-import { API_BASE, flattenTable, mapFastAPIPagesToTableItems } from './types';
+import OcrWorkspace from './components/OcrWorkspace';
+import TableWorkspace from './components/TableWorkspace';
+import { API_BASE } from './types';
 
-type AppView = 'upload' | 'workspace';
+type AppView = 'upload' | 'workspace' | 'ocr-workspace';
 
 interface ToastState {
   message: string;
@@ -16,50 +14,13 @@ interface ToastState {
 
 function App() {
   const [view, setView] = useState<AppView>('upload');
-  const [tables, setTables] = useState<TableItem[]>([]);
-  const [tablesHistory, setTablesHistory] = useState<TableItem[][]>([]);
-
-  const handleTablesChange = (newTables: TableItem[]) => {
-    setTablesHistory((prev) => {
-      const nextHistory = [...prev, tables];
-      if (nextHistory.length > 50) {
-        nextHistory.shift();
-      }
-      return nextHistory;
-    });
-    setTables(newTables);
-  };
-
-  const handleUndo = () => {
-    if (tablesHistory.length === 0) return;
-    setTablesHistory((prev) => {
-      const nextHistory = [...prev];
-      const previousState = nextHistory.pop();
-      if (previousState) {
-        setTables(previousState);
-      }
-      return nextHistory;
-    });
-  };
-
-  // Lắng nghe tổ hợp phím Ctrl+Z để hoàn tác toàn cục
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        handleUndo();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tablesHistory, tables]);
-  const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
+  const [ocrBatchId, setOcrBatchId] = useState<string | null>(null);
+  const [tableBatchId, setTableBatchId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [apiKeysOption, setApiKeysOption] = useState<string>(() => localStorage.getItem('api_keys_option') || 'server');
   const [customApiKeys, setCustomApiKeys] = useState<string>(() => localStorage.getItem('custom_api_keys') || '');
-  const [errors, setErrors] = useState<string[]>([]);
 
   const handleApiKeysOptionChange = (option: string) => {
     setApiKeysOption(option);
@@ -77,91 +38,75 @@ function App() {
     setTimeout(() => setToast((prev) => (prev?.id === id ? null : prev)), 3000);
   };
 
-  const handleFilesSelected = async (files: File[], prompt: string) => {
+  const handleFilesSelected = async (files: File[], _prompt: string, mode: 'table' | 'ocr') => {
     setIsLoading(true);
-    setErrors([]);
 
     try {
-      const allMappedTables: TableItem[] = [];
-      const errList: string[] = [];
-      
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      if (mode === 'ocr') {
         const formData = new FormData();
-        formData.append('file', file);
+        files.forEach((file) => {
+          formData.append('files', file);
+        });
 
-        const response = await fetch(`${API_BASE}/api/v1/extract-tables/`, {
+        const response = await fetch(`${API_BASE}/extract-text`, {
           method: 'POST',
           body: formData,
         });
 
         if (!response.ok) {
           const errText = await response.text();
-          errList.push(`Lỗi file "${file.name}": ${errText || response.statusText}`);
-          continue;
+          throw new Error(errText || response.statusText);
         }
 
         const result = await response.json();
-        if (result.status === 'success' && result.pages) {
-          const fileTables = mapFastAPIPagesToTableItems(result.pages, file.name);
-          allMappedTables.push(...fileTables);
-        } else if (result.error) {
-          errList.push(`Lỗi file "${file.name}": ${result.error}`);
+        const batchId = result.data?.batchId || result.batchId;
+        
+        if (!batchId) {
+          throw new Error('Không nhận được ID lô xử lý từ server');
         }
-      }
 
-      if (allMappedTables.length === 0) {
-        showToast('Không tìm thấy bảng dữ liệu trong tài liệu', 'error');
-        setTables([]);
-        setTablesHistory([]);
+        setOcrBatchId(batchId);
+        showToast('Đang khởi tạo hàng đợi quét OCR cho tài liệu...', 'success');
+        setView('ocr-workspace');
       } else {
-        setTables(allMappedTables.map(flattenTable));
-        setTablesHistory([]);
-        showToast(
-          `Trích xuất thành công ${allMappedTables.length} bảng dữ liệu`,
-          'success'
-        );
-      }
-
-      setErrors(errList);
-
-      if (files.length > 0) {
-        setFileInfo({
-          filename: files[0].name,
-          originalName: files[0].name,
-          mimeType: files[0].type,
-          previewUrl: '',
+        const formData = new FormData();
+        files.forEach((file) => {
+          formData.append('files', file);
         });
+
+        const response = await fetch(`${API_BASE}/extract-tables`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(errText || response.statusText);
+        }
+
+        const result = await response.json();
+        const batchId = result.data?.batchId || result.batchId;
+        
+        if (!batchId) {
+          throw new Error('Không nhận được ID lô xử lý từ server');
+        }
+
+        setTableBatchId(batchId);
+        showToast('Đang khởi tạo hàng đợi trích xuất bảng...', 'success');
+        setView('workspace');
       }
-      setView('workspace');
     } catch (error: any) {
-      showToast('Lỗi kết nối server: ' + error.message, 'error');
+      showToast('Lỗi: ' + error.message, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleReset = async () => {
-    // Xóa file trên server
-    if (fileInfo) {
-      try {
-        await fetch(`${API_BASE}/api/delete-file/${fileInfo.filename}`, {
-          method: 'DELETE',
-        });
-      } catch {
-        // Bỏ qua lỗi xóa file
-      }
-    }
-
+  const handleReset = () => {
     setView('upload');
-    setTables([]);
-    setTablesHistory([]);
-    setFileInfo(null);
-    setErrors([]);
+    setOcrBatchId(null);
+    setTableBatchId(null);
   };
-
-  const totalRows = tables.reduce((sum, t) => sum + t.rows.length, 0);
-  const totalCols = tables.reduce((sum, t) => sum + (t.rows[0]?.length || 0), 0);
 
   return (
     <>
@@ -258,7 +203,7 @@ function App() {
             )}
           </div>
 
-          {view === 'workspace' && (
+          {view !== 'upload' && (
             <button className="btn btn-ghost" onClick={handleReset}>
               ↩️ Upload mới
             </button>
@@ -269,10 +214,11 @@ function App() {
       {/* Loading Overlay */}
       {isLoading && (
         <div className="progress-overlay">
-          <div className="progress-card">
+          <div className="progress-overlay-backdrop" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }} />
+          <div className="progress-card" style={{ position: 'relative', zIndex: 10 }}>
             <div className="progress-spinner" />
-            <h3>Đang phân tích tài liệu...</h3>
-            <p>Gemini AI đang trích xuất dữ liệu bảng từ tài liệu của bạn</p>
+            <h3>Đang tải tài liệu lên...</h3>
+            <p>Hệ thống đang khởi tạo lô xử lý dữ liệu</p>
           </div>
         </div>
       )}
@@ -283,100 +229,13 @@ function App() {
       )}
 
       {/* Workspace View */}
-      {view === 'workspace' && (
-        <>
-          {errors.length > 0 && (
-            <div className="warnings-banner" style={{
-              background: 'rgba(239, 68, 68, 0.1)',
-              borderBottom: '1px solid rgba(239, 68, 68, 0.2)',
-              color: 'rgba(239, 68, 68, 0.9)',
-              padding: '12px 24px',
-              fontSize: '13px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-              textAlign: 'left'
-            }}>
-              <div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                ⚠️ Một số tài liệu hoặc trang không thể quét bằng AI (đã tự động xử lý nội bộ nếu có thể):
-              </div>
-              <ul style={{ margin: 0, paddingLeft: '20px', listStyleType: 'disc' }}>
-                {errors.map((err, idx) => (
-                  <li key={idx}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="workspace">
-            {/* Left Panel - Edit */}
-            <div className="workspace-panel">
-              <div className="panel-header">
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  ✏️ Chỉnh sửa dữ liệu
-                  <span className="panel-header-badge">
-                    {tables.length} bảng
-                  </span>
-                </h2>
-                {tablesHistory.length > 0 && (
-                  <button
-                    className="btn btn-ghost"
-                    onClick={handleUndo}
-                    title="Hoàn tác thao tác vừa thực hiện (Ctrl+Z)"
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      height: '28px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      borderRadius: 'var(--radius-sm)'
-                    }}
-                  >
-                    ↩️ Hoàn tác
-                  </button>
-                )}
-              </div>
-              <div className="panel-content">
-                {tables.length > 0 ? (
-                  <TableEditor tables={tables} onTablesChange={handleTablesChange} />
-                ) : (
-                  <div className="empty-state">
-                    <div className="empty-state-icon">📋</div>
-                    <h3>Không có dữ liệu</h3>
-                    <p>Tài liệu không chứa bảng dữ liệu nào</p>
-                  </div>
-                )}
-              </div>
-            </div>
+      {view === 'workspace' && tableBatchId && (
+        <TableWorkspace batchId={tableBatchId} onReset={handleReset} showToast={showToast} />
+      )}
 
-            {/* Right Panel - Excel Preview */}
-            <div className="workspace-panel">
-              <div className="panel-header">
-                <h2>
-                  📊 Preview Excel
-                </h2>
-                <span className="panel-header-badge">Realtime</span>
-              </div>
-              <div className="panel-content panel-content-preview">
-                <ExcelPreview tables={tables} />
-              </div>
-            </div>
-          </div>
-
-          {/* Export Bar */}
-          <div className="export-bar">
-            <div className="export-info">
-              <div className="export-info-dot" />
-              <span>
-                {tables.length} bảng · {totalRows} hàng · {totalCols} cột
-              </span>
-            </div>
-            <div className="export-actions">
-              <ExportButton tables={tables} disabled={tables.length === 0} />
-            </div>
-          </div>
-        </>
+      {/* OCR Workspace View */}
+      {view === 'ocr-workspace' && ocrBatchId && (
+        <OcrWorkspace batchId={ocrBatchId} onReset={handleReset} showToast={showToast} />
       )}
 
       {/* Toast */}

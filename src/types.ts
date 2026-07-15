@@ -102,18 +102,20 @@ export function mapFastAPIPagesToTableItems(pages: any[], filename: string): Tab
   if (!pages) return tableItems;
 
   for (const page of pages) {
-    const pageNum = page.page_number;
+    const pageNum = page.pageNumber !== undefined ? page.pageNumber : page.page_number;
     const tables = page.tables || [];
     for (const tbl of tables) {
-      const tblIdx = tbl.table_index;
+      const tblIdx = tbl.tableIndex !== undefined ? tbl.tableIndex : tbl.table_index;
       const rows = tbl.rows || [];
       if (rows.length === 0) continue;
 
       let maxCol = 0;
       for (const r of rows) {
-        for (const c of r.cells || []) {
-          if (c.col_index > maxCol) {
-            maxCol = c.col_index;
+        const cells = r.cells || [];
+        for (const c of cells) {
+          const colIndex = c.colIndex !== undefined ? c.colIndex : c.col_index;
+          if (colIndex > maxCol) {
+            maxCol = colIndex;
           }
         }
       }
@@ -126,13 +128,13 @@ export function mapFastAPIPagesToTableItems(pages: any[], filename: string): Tab
       const merges: MergeRange[] = [];
 
       for (const r of rows) {
-        const r_idx = r.row_index;
+        const r_idx = r.rowIndex !== undefined ? r.rowIndex : r.row_index;
         const cells = r.cells || [];
         for (const cell of cells) {
-          const c_idx = cell.col_index;
+          const c_idx = cell.colIndex !== undefined ? cell.colIndex : cell.col_index;
           const text = cell.text || "";
-          const col_span = cell.col_span || 1;
-          const row_span = cell.row_span || 1;
+          const col_span = cell.colSpan !== undefined ? cell.colSpan : (cell.col_span || 1);
+          const row_span = cell.rowSpan !== undefined ? cell.rowSpan : (cell.row_span || 1);
 
           if (r_idx < gridRows.length && c_idx < colCount) {
             gridRows[r_idx][c_idx] = text;
@@ -170,3 +172,50 @@ export function mapFastAPIPagesToTableItems(pages: any[], filename: string): Tab
 
   return tableItems;
 }
+
+export interface OcrPage {
+  pageNumber: number;
+  text: string;
+  confidence: number;
+}
+
+export interface OcrFile {
+  fileIndex: number;
+  jobId: string;
+  fileName: string;
+  status: 'waiting' | 'active' | 'completed' | 'failed' | 'processing';
+  totalPages: number;
+  completedPages: number;
+  pages: OcrPage[];
+  failedReason?: string;
+}
+
+export interface OcrBatch {
+  batchId: string;
+  status: 'waiting' | 'processing' | 'completed' | 'failed';
+  totalFiles: number;
+  completedFiles: number;
+  files: OcrFile[];
+}
+
+export interface TableFile {
+  fileIndex: number;
+  jobId: string;
+  fileName: string;
+  status: 'waiting' | 'active' | 'completed' | 'failed' | 'processing';
+  totalPages: number;
+  completedPages: number;
+  pages: any[];
+  tablePageNumbers?: number[];
+  failedReason?: string;
+}
+
+export interface TableBatch {
+  batchId: string;
+  status: 'waiting' | 'processing' | 'completed' | 'failed';
+  totalFiles: number;
+  completedFiles: number;
+  files: TableFile[];
+}
+
+

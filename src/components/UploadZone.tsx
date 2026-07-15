@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 
 interface UploadZoneProps {
-  onFilesSelected: (files: File[], prompt: string) => void;
+  onFilesSelected: (files: File[], prompt: string, mode: 'table' | 'ocr') => void;
   isLoading: boolean;
 }
 
@@ -19,6 +19,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected, isLoading }) =
   const [dragOver, setDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [mode, setMode] = useState<'table' | 'ocr'>('table');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -58,7 +59,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected, isLoading }) =
 
   const handleSubmit = () => {
     if (selectedFiles.length > 0) {
-      onFilesSelected(selectedFiles, prompt);
+      onFilesSelected(selectedFiles, prompt, mode);
     }
   };
 
@@ -93,7 +94,25 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected, isLoading }) =
   };
 
   return (
-    <div className="upload-section">
+    <div className="upload-section" style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Mode Selector Tabs */}
+      <div className="mode-selector" style={{ display: 'flex', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)', marginBottom: '16px', alignSelf: 'center', width: '100%', maxWidth: '400px' }}>
+        <button
+          type="button"
+          onClick={() => setMode('table')}
+          style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-sm)', border: 'none', background: mode === 'table' ? 'rgba(59, 130, 246, 0.15)' : 'transparent', color: mode === 'table' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+        >
+          📊 Trích xuất Bảng
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('ocr')}
+          style={{ flex: 1, padding: '10px', borderRadius: 'var(--radius-sm)', border: 'none', background: mode === 'ocr' ? 'rgba(59, 130, 246, 0.15)' : 'transparent', color: mode === 'ocr' ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+        >
+          🔍 Quét Văn Bản (OCR)
+        </button>
+      </div>
+
       <div
         className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
         onDragOver={handleDragOver}
