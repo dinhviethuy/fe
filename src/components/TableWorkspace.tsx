@@ -41,7 +41,8 @@ const TableWorkspace: React.FC<TableWorkspaceProps> = ({ batchId, onReset, showT
 
     eventSource.onmessage = async (event) => {
       try {
-        const data = JSON.parse(event.data);
+        const raw = JSON.parse(event.data);
+        const data = raw.data || raw;
         if (data.type === 'progress') {
           setBatch((prev) => {
             if (!prev) return prev;
