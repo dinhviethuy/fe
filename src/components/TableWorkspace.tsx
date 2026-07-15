@@ -75,9 +75,8 @@ const TableWorkspace: React.FC<TableWorkspaceProps> = ({ batchId, onReset, showT
       }
     };
 
-    eventSource.onerror = () => {
-      console.warn('Lỗi kết nối SSE hoặc luồng kết thúc, đóng kết nối');
-      eventSource.close();
+    eventSource.onerror = (err) => {
+      console.warn('Lỗi hoặc kết nối SSE bị ngắt, trình duyệt sẽ tự động kết nối lại:', err);
     };
 
     return () => {
